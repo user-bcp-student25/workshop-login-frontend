@@ -63,8 +63,8 @@ describe('DashboardComponent characterization', () => {
     expect(cdr.detectChanges).toHaveBeenCalled();
   });
 
-  it('shows an error and clears loading when the task request fails', async () => {
-    const { component, cdr, tasksService } = createDashboard();
+  it('shows a generic error and stays on the dashboard when the task request fails', async () => {
+    const { component, cdr, router, session, tasksService } = createDashboard();
     tasksService.getTasks.mockRejectedValue(new Error('No se pudo cargar el dashboard'));
 
     await component.ngOnInit();
@@ -72,6 +72,8 @@ describe('DashboardComponent characterization', () => {
     expect(component.error).toBe('No se pudo cargar el dashboard');
     expect(component.loading).toBe(false);
     expect(cdr.detectChanges).toHaveBeenCalled();
+    expect(router.navigate).not.toHaveBeenCalled();
+    expect(session.clear).not.toHaveBeenCalled();
   });
 
   it('clears session and navigates without requesting tasks', async () => {

@@ -45,4 +45,24 @@ describe('AuthService', () => {
     await expect(service.login({ username: 'student', password: 'bad' }))
       .rejects.toThrow('No se pudo autenticar. Verifica tus credenciales.');
   });
+
+  it('returns a generic error when the authentication backend is unavailable', async () => {
+    vi.mocked(axios.post).mockRejectedValue(Object.assign(new Error('connect ECONNREFUSED'), {
+      code: 'ECONNREFUSED'
+    }));
+    const service = new AuthService(new SessionService());
+
+    await expect(service.login({ username: 'student', password: 'Workshop123!' }))
+      .rejects.toThrow('No se pudo autenticar. Verifica tus credenciales.');
+  });
+
+  it('returns a generic error when the login request times out', async () => {
+    vi.mocked(axios.post).mockRejectedValue(Object.assign(new Error('timeout'), {
+      code: 'ECONNABORTED'
+    }));
+    const service = new AuthService(new SessionService());
+
+    await expect(service.login({ username: 'student', password: 'Workshop123!' }))
+      .rejects.toThrow('No se pudo autenticar. Verifica tus credenciales.');
+  });
 });

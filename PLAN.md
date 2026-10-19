@@ -1,160 +1,155 @@
-## Aprobación humana
-Aprobado por: Rosana Bermeo
-Fecha: 2026-10-19
-Alcance: Implementar H-02 y H-04 según este plan, aceptando que la sesión en memoria se pierde al recargar y que habrá que iniciar sesión de nuevo.
+# Plan de correccion y seguimiento: H-01, H-03 y H-08
 
-# Plan de correccion
+> Alcance confirmado para las correcciones: H-01 y H-03. En el estado actual
+> de `HALLAZGOS.md`, ambos figuran como `Resuelto`; este documento describe por
+> separado la correccion aplicada y las pruebas que debian caracterizar el
+> comportamiento antes del cambio. Se agrega H-08 como seguimiento: al no
+> encontrarse duplicacion demostrable, no se propone una refactorizacion.
 
-## Alcance y seleccion
+## Item: H-01
 
-Se proponen cambios para estos hallazgos confirmados que siguen en estado
-`Pendiente` en `HALLAZGOS.md`:
+### Item de HALLAZGOS.md
 
-- **H-02, Token de autenticacion en `localStorage`**: prioridad por severidad
-  alta y por la posibilidad de que JavaScript del mismo origen lea un token
-  persistido.
-- **H-04, Componentes acoplados a HTTP, URLs, sesion y navegacion**: prioridad
-  por ser un cambio arquitectonico acotable a los componentes de login y
-  dashboard, que tambien permite centralizar la sesion de H-02.
-
-No se incluyen otros hallazgos en este plan.
-
-## Invariantes funcionales
-
-- Mantener `POST http://localhost:8080/auth/login`, el timeout de 5000 ms, el
-  cuerpo `{ username, password, client: 'angular-workshop' }` y el uso de
-  `data.token` / `data.user`.
-- Mantener `GET http://localhost:8000/api/tasks`, el query `owner`, el header
-  `Authorization: Bearer <token>` y el procesamiento actual de tareas,
-  incluido excluir `ARCHIVED` y ordenar por prioridad descendente.
-- Mantener la navegacion de login exitoso a `/dashboard`, la redireccion a
-  `/login` sin sesion y el cierre de sesion local sin llamada al backend.
-- No cambiar rutas, metodos, cuerpos, respuestas ni autenticacion HTTP descritos
-  en `docs/ENDPOINTS.md`. La politica de almacenamiento del token es interna al
-  cliente, no parte del contrato HTTP.
-- No agregar dependencias. Reutilizar Axios, Vitest y las herramientas ya
-  presentes.
-
-## H-02 — Token de autenticacion en `localStorage`
+Dependencias `axios` y `lodash` con avisos de seguridad. Estado actual:
+`Resuelto`.
 
 ### Problema
 
-El token queda persistido y puede ser leido por cualquier script que se ejecute
-en el origen. Una XSS podria extraerlo y usarlo en solicitudes autenticadas.
-Moverlo a memoria reduce la exposicion persistente, pero no protege contra una
-XSS activa mientras la aplicacion esta abierta.
+Las versiones anteriores declaradas (`axios@0.31.0` y `lodash@4.17.21`) estaban
+dentro de rangos afectados por advisories de npm. El alcance de este item son
+estas dos dependencias directas; no implica que todo el arbol de dependencias
+este libre de vulnerabilidades.
 
-### Cambio propuesto
+### Cambio propuesto / aplicado
 
-Centralizar token y usuario en un `SessionService` de memoria. El login guardara
-la respuesta validada en ese servicio; el dashboard obtendra de alli el token
-para que `TasksService` envie el mismo header Bearer; logout limpiara la sesion.
-No guardar el token ni el usuario en `localStorage`. Conservar las preferencias
-del usuario por separado. Tras una recarga completa, la sesion en memoria se
-pierde y el usuario debera autenticarse otra vez; es el compromiso acotado para
-no introducir cambios en el backend ni en el contrato HTTP.
+- Actualizar Axios y Lodash a versiones publicadas sin los advisories directos
+  reportados para las versiones anteriores: `axios@1.20.0` y `lodash@4.18.1`.
+- Mantener versiones exactas y sincronizar el lockfile con `npm install` para
+  que la resolucion sea reproducible.
+- No usar `npm audit fix --force`, no ocultar avisos y no bajar el umbral del
+  scanner. Registrar por separado las vulnerabilidades que sigan en otras
+  dependencias transitivas o directas.
+- Conservar el uso actual: Axios sigue realizando las peticiones HTTP y Lodash
+  sigue combinando las preferencias guardadas.
 
 ### Archivos a tocar
 
-- `src/app/services/session.service.ts` (nuevo): estado de sesion en memoria.
-- `src/app/services/session.service.spec.ts` (nuevo): contrato de almacenamiento
-  y limpieza de sesion.
-- `src/app/services/auth.service.ts` (nuevo): login tipado y coordinacion con la
-  sesion.
-- `src/app/login/login.component.ts`: consumir el servicio, sin escribir el
-  token ni el usuario directamente en almacenamiento persistente.
-- `src/app/dashboard/dashboard.component.ts`: consultar y limpiar la sesion a
-  traves de servicios, sin leer claves de autenticacion del navegador.
-- `src/app/login/login.component.spec.ts` y
-  `src/app/dashboard/dashboard.component.spec.ts` (nuevos): caracterizacion y
-  regresion del flujo de autenticacion.
-- `docs/ENDPOINTS.md`: actualizar unicamente la nota de almacenamiento local
-  para describir la sesion en memoria; preservar sin cambios los contratos HTTP
-  y el flujo funcional enumerados arriba.
+- `package.json`: versiones exactas de Axios y Lodash.
+- `package-lock.json`: resolucion e integridad actualizadas. En el estado local
+  consultado este archivo esta sin seguimiento por Git; debe incluirse en el
+  control de versiones para que la actualizacion sea reproducible en otros
+  entornos.
+- `src/app/services/auth.service.spec.ts`: comprobar que el POST conserva URL,
+  body y timeout despues de cambiar Axios.
+- `src/app/services/preferences.service.spec.ts`: comprobar que defaults,
+  merge, JSON invalido y guardado siguen funcionando despues de cambiar Lodash.
+- `HALLAZGOS.md`: conservar H-01 como `Resuelto` con las versiones verificadas y
+  aclarar que el estado no significa que todo `npm audit` quede limpio.
 
-### Prueba de caracterizacion antes de tocar implementacion
+### Prueba que debia escribirse antes de tocar dependencias
 
-Crear pruebas Vitest para comprobar el comportamiento observable actual del
-login exitoso (almacena la sesion y navega a `/dashboard`), del dashboard
-(redirige sin token y envia el bearer cuando hay sesion) y del logout (limpia la
-sesion y navega a `/login`). Ejecutarlas contra los componentes actuales antes
-de modificarlos. Durante la migracion, conservar esas aserciones de flujo y
-agregar la regresion de seguridad: el token no se persiste en `localStorage` y
-deja de estar disponible al limpiar el servicio.
+1. Capturar el resultado de `npm audit --json` antes del cambio e identificar
+   especificamente los advisories atribuibles a Axios y Lodash, sin modificar
+   ni ignorar el umbral.
+2. Ejecutar las pruebas existentes de `AuthService` y `PreferencesService` como
+   caracterizacion del comportamiento funcional previo.
+3. Tras actualizar, repetir `npm audit --json` y comprobar que Axios/Lodash ya
+   no aparecen como vulnerabilidades, y repetir esas pruebas para confirmar que
+   los contratos de login y preferencias se conservan.
 
-## H-04 — Componentes acoplados a HTTP, URLs, sesion y navegacion
+La auditoria posterior reporto que Axios y Lodash ya no estan entre los paquetes
+vulnerables, aunque quedan advisories de otras dependencias. Esos avisos deben
+seguir visibles y requieren seguimiento separado.
+
+## Item: H-03
+
+### Item de HALLAZGOS.md
+
+Mensaje de login renderizado anteriormente con `[innerHTML]`. Estado actual:
+`Resuelto`.
 
 ### Problema
 
-`LoginComponent` y `DashboardComponent` mezclan peticiones Axios, URLs, acceso a
-sesion, transformacion/estado de vista y navegacion. Esto acopla las pruebas a
-los componentes y hace que cambios de endpoint o almacenamiento obliguen a
-modificar la UI.
+El template trataba el mensaje como HTML. Aunque los textos actuales eran
+controlados, ese sink podia volver inseguro el flujo si mas adelante se
+concatenaban datos del usuario o detalles del backend.
 
-### Cambio propuesto
+### Cambio propuesto / aplicado
 
-- Crear `AuthService` y `TasksService` para alojar sus respectivas llamadas
-  HTTP; los componentes no importaran Axios.
-- Centralizar la URL del backend y la configuracion de timeout en
-  `src/environments/environment.ts`, siguiendo las convenciones del proyecto.
-- Mantener la sesion bajo `SessionService`; extraer la persistencia de
-  preferencias a `PreferencesService` para que el componente no gestione
-  directamente `localStorage` ni claves magicas.
-- Limitar los componentes a estado/presentacion y coordinacion de navegacion;
-  conservar el filtrado, etiquetado y orden visible de las tareas sin duplicar
-  logica.
-- Definir interfaces para el request/respuesta de login, usuario y tarea; no
-  introducir `any` en los limites de los servicios.
-- Normalizar errores en los servicios con mensajes publicos consistentes, sin
-  mostrar detalles internos del backend.
-- Usar retorno anticipado para las validaciones de login. Mantener URL, clave y
-  timeout fuera de los componentes; no sumar abstracciones que no tengan un
-  unico uso concreto.
+- Representar el mensaje como texto con interpolacion Angular (`{{ message }}`),
+  que escapa contenido en lugar de interpretarlo como markup.
+- Guardar en `message` texto plano, sin etiquetas `<strong>`.
+- Mantener los mensajes genericos y no incluir username ni detalles de error
+  del backend.
+- No usar `DomSanitizer` ni marcar contenido como confiable; el mensaje no
+  necesita HTML.
 
 ### Archivos a tocar
 
-- `src/app/services/auth.service.ts` y
-  `src/app/services/auth.service.spec.ts` (nuevos).
-- `src/app/services/tasks.service.ts` y
-  `src/app/services/tasks.service.spec.ts` (nuevos).
-- `src/app/services/session.service.ts` y
-  `src/app/services/session.service.spec.ts` (nuevos; compartidos con H-02).
-- `src/app/services/preferences.service.ts` y
-  `src/app/services/preferences.service.spec.ts` (nuevos).
-- `src/environments/environment.ts` (nuevo): URLs y timeout configurables.
-- `src/app/login/login.component.ts` y
-  `src/app/dashboard/dashboard.component.ts`: inyectar servicios y retirar las
-  responsabilidades de HTTP/almacenamiento directo.
-- `src/app/login/login.component.spec.ts` y
-  `src/app/dashboard/dashboard.component.spec.ts` (nuevos): caracterizacion de
-  validacion, estados de carga/error, navegacion y flujo de tareas.
-- `docs/ENDPOINTS.md`: documentar la nueva ubicacion de URLs y el cambio interno
-  de almacenamiento cuando corresponda, sin alterar los endpoints ni sus
-  contratos.
+- `src/app/login/login.component.html`: reemplazar `[innerHTML]` por
+  interpolacion.
+- `src/app/login/login.component.ts`: asignar mensajes de texto plano.
+- `src/app/login/login.component.spec.ts`: comprobar mensajes literales y que
+  no contengan markup.
+- `HALLAZGOS.md`: mantener H-03 como `Resuelto` con evidencia del template y
+  del componente.
 
-### Prueba de caracterizacion antes de tocar implementacion
+### Prueba que debia escribirse antes de tocar la plantilla
 
-Agregar pruebas a los componentes actuales con Axios, Router, `localStorage`,
-`NgZone` y `ChangeDetectorRef` sustituidos por dobles. Verificar: URL, metodo,
-timeout y cuerpo exactos del login; URL de tareas, query `owner` y header
-Bearer; rechazo de respuesta de login sin token; redireccion sin sesion; filtro
-de tareas archivadas y orden; y limpieza de sesion/navegacion al cerrar sesion.
-Ejecutar la suite antes de extraer servicios. Despues, trasladar las aserciones
-de protocolo a pruebas de servicios y conservar en las de componentes las
-aserciones de presentacion y navegacion.
+1. Caracterizar validaciones de usuario/contrasena vacios y errores de login:
+   comprobar el texto exacto que se presenta y que no concatena datos del
+   usuario ni el detalle del backend.
+2. Agregar una comprobacion de plantilla que confirme que el mensaje usa
+   interpolacion y no `[innerHTML]`; si se requiere renderizar el componente,
+   usar el harness Angular compatible con el entorno de pruebas existente, sin
+   introducir dependencias ni cambiar los quality gates.
+3. Despues del cambio, ejecutar las pruebas del componente y confirmar que los
+   mensajes siguen siendo los mismos en pantalla como texto, incluso si una
+   cadena contiene caracteres `<` o `>`.
 
-## Secuencia y validacion
+La prueba actual confirma mensajes exactos y ausencia de `<` en el estado del
+componente. La plantilla tambien fue verificada directamente y no contiene
+`[innerHTML]`.
 
-1. Escribir y ejecutar las pruebas de caracterizacion descritas arriba antes de
-   editar los componentes.
-2. Extraer servicios, tipos y configuracion en cambios pequenos; ejecutar
-   `npm test` despues de cada paso.
-3. Verificar que URLs, cuerpos, query, Bearer, resultados visibles y navegacion
-   siguen iguales; comprobar que logout invalida la sesion en memoria.
-4. Ejecutar `npm run build` y `npm run test:coverage`. Mantener los quality gates
-   existentes y buscar cobertura de al menos 85% en el codigo modificado, como
-   exige `REGLAS.md`.
+## Item: H-08
 
-La configuracion actual de Vitest usa entorno `node`; las pruebas pueden
-instanciar los componentes con dobles y probar los servicios directamente, sin
-anadir un entorno DOM ni nuevas dependencias.
+### Item de HALLAZGOS.md
+
+Logica duplicada entre componentes. Estado actual: `No encontrado`.
+
+### Analisis y decision
+
+Se revisaron los limites actuales: `LoginComponent` delega autenticacion a
+`AuthService`; `DashboardComponent` delega la consulta a `TasksService` y usa
+`SessionService` para leer/limpiar la sesion. El acceso a la sesion en login y
+dashboard ocurre en fases diferentes y no constituye por si mismo un bloque
+duplicado.
+
+No hay un cambio de codigo justificable para este item. No extraer servicios ni
+funciones adicionales sin encontrar primero comportamiento repetido concreto.
+
+### Archivos y evidencia
+
+- `src/app/login/login.component.ts:43`: delega el login a `AuthService`.
+- `src/app/dashboard/dashboard.component.ts:54`: delega la carga a
+  `TasksService`.
+- `src/app/services/auth.service.ts:14`: contiene la llamada POST.
+- `src/app/services/tasks.service.ts:19`: contiene la llamada GET.
+- `HALLAZGOS.md`: conserva H-08 como `No encontrado` con estas referencias.
+
+### Prueba previa
+
+No se agrega una prueba de extraccion porque no se encontro codigo duplicado que
+corregir. Si una revision posterior identifica el mismo comportamiento
+implementado en dos sitios, primero se debe escribir una prueba de
+caracterizacion que compare sus resultados actuales; despues se puede extraer
+la logica y ejecutar esa prueba contra el codigo compartido.
+
+## Registro de alcance
+
+- No se modifica `docs/ENDPOINTS.md`: los contratos HTTP no cambian en ninguno
+  de estos items.
+- H-01 y H-03 ya estan `Resuelto`; no se cambia su estado.
+- H-08 permanece `No encontrado`; no se fuerza una correccion sin duplicacion
+  comprobada.
+- En esta actualizacion solo se documenta el seguimiento; no se modifica codigo.

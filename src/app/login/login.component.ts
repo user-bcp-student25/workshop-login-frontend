@@ -30,11 +30,11 @@ export class LoginComponent {
   async login(): Promise<void> {
     this.message = '';
     if (this.username.trim() === '') {
-      this.message = '<strong>Ingrese un usuario.</strong>';
+      this.message = 'Ingrese un usuario.';
       return;
     }
     if (this.password.trim() === '') {
-      this.message = '<strong>Ingrese una contraseña.</strong>';
+      this.message = 'Ingrese una contraseña.';
       return;
     }
 
@@ -47,7 +47,7 @@ export class LoginComponent {
       this.preferencesService.save(this.preferences);
       await this.router.navigate(['/dashboard']);
     } catch {
-      this.message = '<strong>No se pudo autenticar.</strong>';
+      this.message = 'No se pudo autenticar.';
     } finally {
       this.busy = false;
     }

@@ -44,7 +44,8 @@ describe('LoginComponent characterization', () => {
     await component.login();
 
     expect(authService.login).not.toHaveBeenCalled();
-    expect(component.message).toContain('Ingrese un usuario.');
+    expect(component.message).toBe('Ingrese un usuario.');
+    expect(component.message).not.toContain('<');
 
     component.username = 'student';
     component.password = '   ';
@@ -52,7 +53,8 @@ describe('LoginComponent characterization', () => {
     await component.login();
 
     expect(authService.login).not.toHaveBeenCalled();
-    expect(component.message).toContain('Ingrese una contraseña.');
+    expect(component.message).toBe('Ingrese una contraseña.');
+    expect(component.message).not.toContain('<');
   });
 
   it('does not save preferences or navigate when authentication fails', async () => {
@@ -65,7 +67,8 @@ describe('LoginComponent characterization', () => {
 
     expect(preferencesService.save).not.toHaveBeenCalled();
     expect(router.navigate).not.toHaveBeenCalled();
-    expect(component.message).toContain('No se pudo autenticar.');
+    expect(component.message).toBe('No se pudo autenticar.');
+    expect(component.message).not.toContain('<');
     expect(component.busy).toBe(false);
   });
 
@@ -77,7 +80,7 @@ describe('LoginComponent characterization', () => {
 
     await component.login();
 
-    expect(component.message).toContain('No se pudo autenticar');
+    expect(component.message).toBe('No se pudo autenticar.');
     expect(component.message).not.toContain('private backend detail');
     expect(component.busy).toBe(false);
   });
